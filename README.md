@@ -105,6 +105,11 @@ DSH_PERMISSION_MODE=danger-full-access DEEPSEEK_API_KEY=sk-xxx \
 npx -y @deepseek-ai/dsh --profile web --patch .cordis.local.yml
 ```
 
+**Q：启动报 `EADDRINUSE: address already in use 127.0.0.1:3080`？**
+上一次的 dsh 没关干净（占着端口），或别的程序占了 3080。先关掉旧的启动窗口
+再试；顽固残留就在任务管理器结束 node.exe，或换端口启动：
+`npx -y @deepseek-ai/dsh --profile web --port 3081 --patch .cordis.local.yml`
+
 **Q：第一次生成时 agent 说"引擎预热中，请稍后重试"？**
 正常现象。专利引擎首次初始化约 20-60 秒，agent 会自己重试，不用管。
 
