@@ -98,8 +98,10 @@ if ($SetupOnly) {
 }
 
 # -- 启动 --
+# 注意：不能写 & npx -y "@deepseek-ai/dsh"——PS 调用符+引号包名会让 npm 收到
+# "px"（首字母被吃，实测踩坑）；一律用裸写法
 Write-Host ""
 Write-Host "启动服务中... 浏览器将自动打开 http://127.0.0.1:3080"
 Write-Host "停止服务：关闭本窗口即可"
 Write-Host ""
-& npx -y "@deepseek-ai/dsh" --profile web --patch "$root\.cordis.local.yml"
+npx -y @deepseek-ai/dsh --profile web --patch "$root\.cordis.local.yml"

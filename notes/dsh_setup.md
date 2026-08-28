@@ -46,6 +46,11 @@ npx -y @deepseek-ai/dsh --profile web --patch .cordis.local.yml
    ps1 需 UTF-8 BOM（bat 内置首次运行自动补 BOM 逻辑）。
 7. **`--no-open` 不存在**：`dsh web` 实际只支持 --host/--port/--trusted-host，
    README 里的 `--no-open` 在 0.1.0-rc.6 会报 unknown option 退出。
+8. **PS 里 `& npx -y "@pkg"` 首字母被吃**：调用符 & + 引号包裹的 scoped 包名
+   会让 npm 收到 "px" 去装不相干的包（npm 日志 argv 可见）。启动脚本一律用
+   裸写法 `npx -y @deepseek-ai/dsh ...`。
+9. **bat 必须纯 ASCII + CRLF**：cmd 按 GBK 解析 UTF-8 中文注释会拼出幽灵
+   命令行（报"不是内部或外部命令"）。
 
 ## 性能实测（2026-08-28）
 
