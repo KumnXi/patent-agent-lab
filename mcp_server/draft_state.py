@@ -79,7 +79,7 @@ def full_text() -> str:
     ordered += [s for s in sections if s not in SECTION_ORDER]
     parts = []
     if state.get("title"):
-        parts.append(f"#{state['title']}")
+        parts.append(f"# {state['title']}")
     for name in ordered:
         parts.append(f"## {name}\n\n{sections[name]}")
     return "\n\n".join(parts)
