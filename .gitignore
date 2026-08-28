@@ -1,0 +1,27 @@
+# 本机配置与密钥（绝不入库）
+config/settings.local.json
+config/api_config*.json
+.env
+
+# 启动脚本渲染的机器相关产物
+.cordis.local.yml
+.cordis.yml
+
+# 运行时数据
+data/
+output/
+logs/
+
+# Python
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+
+# 工具与编辑器
+.zcode/
+.mimosa/
+.claude/
+.DS_Store
+Thumbs.db

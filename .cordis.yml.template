@@ -1,0 +1,17 @@
+# dsh 注册 patent MCP 服务器（stdio）——模板文件。
+# 复制本文件渲染产物由 启动脚本 自动生成（.cordis.local.yml，不入库）。
+# 占位符：{{PYTHON}} / {{SERVER}} / {{OLD_PROJECT}}
+# 注意：dsh 只负责启动该进程，不负责安装依赖；python 环境需已安装 "mcp<2"。
+- insert:
+    - id: patent-mcp
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: patent
+        transport: stdio
+        command: "{{PYTHON}}"
+        args:
+          - "{{SERVER}}"
+        env:
+          PYTHONUTF8: "1"
+          PYTHONUNBUFFERED: "1"
+          PATENT_PROJECT_PATH: "{{OLD_PROJECT}}"
