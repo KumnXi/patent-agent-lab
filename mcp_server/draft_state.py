@@ -21,6 +21,17 @@ SECTION_ORDER = [
     "技术领域", "背景技术", "发明内容", "附图说明", "具体实施方式",
 ]
 
+# 各章节字数配额（与 SKILL/校验器口径一致；摘要上限以 compliance_checker 的 ≤300 为准）
+SECTION_QUOTAS = {
+    "技术领域": (300, 500),
+    "背景技术": (1500, 2500),
+    "发明内容": (3000, 5000),
+    "附图说明": (400, 800),
+    "具体实施方式": (5000, 8000),
+    "权利要求书": (1000, 2000),
+    "摘要": (250, 300),
+}
+
 _lock = threading.Lock()
 
 
@@ -44,6 +55,22 @@ def start(idea: str, title: str) -> dict:
         state = {"idea": idea, "title": title, "sections": {}, "updated_at": ""}
         _save(state)
     return stats()
+
+
+def archive_current():
+    """把当前草稿归档到 data/archive/<时间戳>_draft.json，返回归档路径。
+
+    无草稿（文件不存在或全空）时返回 None。开新草稿前调用，防误清历史。"""
+    if not STATE_PATH.exists():
+        return None
+    state = _load()
+    if not state.get("sections") and not state.get("idea"):
+        return None
+    archive_dir = LAB_ROOT / "data" / "archive"
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    dest = archive_dir / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_draft.json"
+    dest.write_text(json.dumps(state, ensure_ascii=False, indent=1), encoding="utf-8")
+    return str(dest)
 
 
 def save_section(name: str, content: str) -> dict:
