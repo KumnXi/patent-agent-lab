@@ -275,6 +275,42 @@ def apply_paragraph_numbering() -> str:
     return _dump({**draft_state.stats(), "numbered_paragraphs": counter})
 
 
+# ── 引用核对工具 ─────────────────────────────────────────────────
+
+
+@app.tool()
+def verify_citations() -> str:
+    """核对草稿中引用的所有专利号（CNxxxx 形式）是否存在于本地专利库。
+
+    不在库内的号码单独标出：可能是库外真实专利（须人工到
+    patents.google.com/patent/<号>/zh 核实标题与内容相符），也可能是编造的
+    引用——交付前必须逐个确认，核实不了就删除。"""
+    text = draft_state.full_text()
+    if len(text) < 1000:
+        return _dump({"error": "草稿内容不足，先完成章节再核对。"})
+    eng = _engine_ready()
+    if eng is None:
+        return _dump(_not_ready())
+    pids = sorted(set(re.findall(r"CN\d+[A-Z]", text)))
+    sections = draft_state._load().get("sections", {})
+    results = []
+    for pid in pids:
+        try:
+            hit = eng.db_loader.get_patent_by_id(pid)
+        except Exception:
+            hit = None
+        where = [name for name, c in sections.items() if pid in c]
+        results.append({"patent_id": pid, "in_db": bool(hit), "where": where,
+                        "status": "OK 本地库内" if hit else "WARN 不在本地库，须人工核实"})
+    not_in = [r for r in results if not r["in_db"]]
+    out = {"total_cited": len(results), "citations": results}
+    out["hint"] = ("所有引用均在本地库内，可放心交付。" if not not_in else
+                   str(len(not_in)) + " 个引用不在本地库：逐个到 "
+                   "patents.google.com/patent/<号>/zh 核实标题与描述相符；" 
+                   "核实不了就删除该引用句。")
+    return _dump(_clip(out, 500))
+
+
 # ── 导出工具 ─────────────────────────────────────────────────────
 
 
