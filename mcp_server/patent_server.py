@@ -34,6 +34,10 @@ OLD_PROJECT = Path(os.environ.get(
 sys.path.insert(0, str(OLD_PROJECT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+# HF 52万篇广域查新库（build_hf_index.py 生成）
+import sqlite3  # noqa: E402
+HF_DB = Path(__file__).resolve().parents[1] / "data" / "hf_patents" / "patents_hf.db"
+
 # Windows 下 stdio 默认编码是 GBK，强制 UTF-8 保证 JSON-RPC 不乱码
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
@@ -196,6 +200,92 @@ def get_terminology(term: str) -> str:
         return _dump(eng.get_terminology_guidance(term))
     except Exception as e:
         return _dump({"error": f"术语查询失败: {e}"})
+
+
+# ── 广域/官方检索（新数据源）────────────────────────────────────
+
+
+@app.tool()
+def search_hf_patents(query: str, top_k: int = 8, ipc_prefix: str = "") -> str:
+    """52 万篇中文专利广域查新（HuggingFace 公开数据集，CNIPA 官方记录，
+    2015-2024 为主，标题+摘要级）。本地精库覆盖不到的领域先用这个。
+
+    Args:
+        query: 关键词（空格分词）
+        top_k: 返回条数（默认 8，上限 20）
+        ipc_prefix: 可选 IPC 前缀过滤（如 H01）
+    """
+    if not HF_DB.exists():
+        return _dump({"error": "HF 索引未建：先运行 build_hf_index.py"})
+    try:
+        import jieba
+
+        tokens = [w for w in jieba.cut_for_search(query or "")
+                  if re.fullmatch(r"[\w一-鿿]+", w)]
+        tokens = sorted(set(tokens))
+        if not tokens:
+            return _dump({"error": "查询词无有效分词"})
+        # OR 语义（AND 对分词双粒度过严易 0 结果），bm25 自然偏向多词命中
+        fts_q = " OR ".join(tokens)
+        conn = sqlite3.connect(f"file:{HF_DB}?mode=ro", uri=True)
+        try:
+            sql = ("SELECT p.title, p.abstract, p.app_number, p.app_date, p.ipc, p.ptype "
+                   "FROM patents_fts f JOIN patents p ON p.id = f.rowid "
+                   "WHERE patents_fts MATCH ?")
+            args = [fts_q]
+            if ipc_prefix.strip():
+                sql += " AND p.ipc LIKE ?"
+                args.append(ipc_prefix.strip() + "%")
+            sql += " ORDER BY bm25(patents_fts) LIMIT ?"
+            args.append(min(max(top_k, 1), 20))
+            rows = conn.execute(sql, args).fetchall()
+        finally:
+            conn.close()
+        hits = [{"title": r[0], "abstract": (r[1] or "")[:260],
+                 "app_number": r[2], "app_date": r[3], "ipc": r[4], "ptype": r[5]}
+                for r in rows]
+        return _dump({"query": query, "count": len(hits), "hits": hits,
+                      "hint": "广域查新结果（标题+摘要级）。引用前建议到 "
+                              "epub.cnipa.gov.cn 或 Google Patents 核实详情。"})
+    except Exception as e:
+        return _dump({"error": f"HF 检索失败: {e}"})
+
+
+@app.tool()
+def search_cnipa(query: str, patent_type: str = "all") -> str:
+    """国知局公布公告网在线检索（epub.cnipa.gov.cn，无需登录，覆盖最新公开）。
+
+    本地库与 HF 数据集都查不到、或需要最新公开时使用。query 建议
+    单个词或极短短语（站点按 AND 理解，多词易 0 结果）。
+    patent_type: invention|utility_model|design|all。单次约 20-60 秒（含 WAF 等待）。
+    """
+    crawl_dir = Path(__file__).resolve().parents[1] / "vendor" / (
+        "patent_disclosure_skill" ) / "tools" / "crawl"
+    script = crawl_dir / "cnipa_epub_search.py"
+    if not script.exists():
+        return _dump({"error": "vendor 爬虫缺失"})
+    import subprocess
+
+    env = dict(os.environ)
+    env["PYTHONUTF8"] = "1"
+    env["EPUB_WAF_MAX_WAIT_SEC"] = "180"
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-u", str(script), "--type", patent_type, query],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=300, cwd=str(crawl_dir), env=env)
+        for line in proc.stdout.splitlines():
+            if line.startswith("EPUB_HITS_JSON:"):
+                hits = json.loads(line.split(":", 1)[1])
+                return _dump({"query": query, "count": len(hits),
+                              "hits": _clip(hits, 400),
+                              "hint": "官方公布公告网结果（含最新公开）。"})
+        return _dump({"error": "未拿到 EPUB_HITS_JSON 输出",
+                      "stderr_tail": (proc.stderr or "")[-400:]})
+    except subprocess.TimeoutExpired:
+        return _dump({"error": "检索超时（>300s），站点 WAF 或网络问题，请稍后重试"})
+    except Exception as e:
+        return _dump({"error": f"CNIPA 检索失败: {e}"})
 
 
 # ── 草稿工具 ─────────────────────────────────────────────────────
