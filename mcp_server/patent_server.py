@@ -203,17 +203,37 @@ def get_terminology(term: str) -> str:
 
 @app.tool()
 def start_disclosure(idea: str, title: str) -> str:
-    """开新草稿：记录技术想法与发明名称，清空旧章节。撰写前第一步。"""
-    return _dump(draft_state.start(idea, title))
+    """开新草稿：记录技术想法与发明名称，清空旧章节。撰写前第一步。
+
+    旧草稿会自动归档到 data/archive/（时间戳命名），不会丢失。"""
+    archived = draft_state.archive_current()
+    stats = draft_state.start(idea, title)
+    if archived:
+        stats["previous_draft_archived_to"] = archived
+    return _dump(stats)
 
 
 @app.tool()
 def save_draft_section(section: str, content: str) -> str:
     """保存一个章节。章节名须用标准名：发明名称/摘要/权利要求书/技术领域/
-    背景技术/发明内容/附图说明/具体实施方式。重复保存即覆盖。"""
+    背景技术/发明内容/附图说明/具体实施方式。重复保存即覆盖。
+
+    返回值带本章节字数与配额对比，超/欠限会提示，请据此当轮调整。"""
     if len(content.strip()) < 50:
         return _dump({"error": "章节内容过短（<50字），疑似未写完，请写完再存。"})
     stats = draft_state.save_section(section, content)
+    quotas = draft_state.SECTION_QUOTAS.get(section)
+    if quotas:
+        lo, hi = quotas
+        n = len(content.strip())
+        stats["本章节字数"] = n
+        stats["本章配额"] = f"{lo}-{hi}"
+        if n < lo:
+            stats["配额提示"] = f"低于下限 {lo - n} 字，请继续扩充本章"
+        elif n > hi:
+            stats["配额提示"] = f"超出上限 {n - hi} 字，请压缩本章"
+        else:
+            stats["配额提示"] = "达标"
     stats["hint"] = "全部章节写完后调 read_full_draft() 回读自查，再跑三个校验。"
     return _dump(stats)
 
@@ -333,7 +353,7 @@ def run_compliance() -> str:
         checker = ComplianceChecker(eng.db_loader)
         before = checker.check(text, draft_state.idea())
         result = {"before_issue_count": len(before.get("issues", [])),
-                  "before_issues": _clip(before.get("issues", []), 200)}
+                  "before_issues": _clip(before.get("issues", []), 400)}
         if before.get("issues"):
             fix = checker.auto_fix(text)
             if fix.get("fixed_count", 0) > 0:
@@ -366,13 +386,19 @@ def check_authenticity() -> str:
         from src.core.data_authenticity_checker import DataAuthenticityChecker
 
         db = getattr(eng.db_loader, "_db", None)
+        checker = DataAuthenticityChecker()
+        report = checker.check(text, draft_state.idea(), db)
+        issues = report.get("issues", [])
         result = DataAuthenticityChecker().auto_fix(text, draft_state.idea(), db)
-        out = {"issue_count": result.get("issue_count"),
-               "fixed_count": result.get("fixed_count"),
+        out = {"issue_count": len(issues),
+               "issues": _clip(issues, 500),
                "summary": result.get("summary", "")}
         if result.get("fixed_count", 0) > 0:
             draft_state.replace_full_text(result["fixed"])
+            out["fixed_count"] = result["fixed_count"]
             out["hint"] = "已自动修复并回写草稿，请 read_full_draft() 取最新全文。"
+        elif issues:
+            out["hint"] = "以上 issues 无法自动修复，请按明细逐条改写对应参数表述。"
         return _dump(out)
     except Exception as e:
         return _dump({"error": f"真实性检查失败: {e}"})
