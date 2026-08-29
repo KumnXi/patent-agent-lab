@@ -1,0 +1,4 @@
+# 国知局公布公告站检索（tools/crawl/cnipa_epub_search.py / cnipa_epub_crawler.py）依赖
+# 与根目录 requirements.txt 中的 playwright 相同；有系统 Chrome / Edge 时不必 playwright install chromium
+# 探测：python tools/shared/browser.py --probe
+playwright>=1.40.0
