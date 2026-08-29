@@ -32,8 +32,10 @@ description: 按标准专利格式撰写技术交底书：检索现有技术、�
    （说明书五章节的 [0001] 式编号由该工具确定性生成，不要手写编号），
    再依次调 `validate_claims()` → `run_compliance()` →
    `check_authenticity()`。返回的 issues 逐条修复（重写对应章节再保存，
-   重写后需重新调 apply_paragraph_numbering()），重新校验直到 issues 清空；
-   修不完的如实列出，不得谎报通过。
+   重写后需重新调 apply_paragraph_numbering()），再调 `verify_citations()`
+   核对引用：不在本地库的专利号逐个核实真伪（网页打开
+   patents.google.com/patent/<号>/zh 比对标题），核实不了就删除该引用句。
+   重新校验直到 issues 清空；修不完的如实列出，不得谎报通过。
 7. **交付**：先调 `export_word()` 导出 Word（把返回的保存路径报告给用户），
    再把 `read_full_draft()` 的全文用文件工具存到
    `output/<发明名称>_agent.md`，并在对话里报告：总字数、三项校验结果、
