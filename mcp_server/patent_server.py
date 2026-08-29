@@ -255,6 +255,36 @@ def apply_paragraph_numbering() -> str:
     return _dump({**draft_state.stats(), "numbered_paragraphs": counter})
 
 
+# ── 导出工具 ─────────────────────────────────────────────────────
+
+
+@app.tool()
+def export_word(filename: str = "") -> str:
+    """把当前草稿导出为标准专利格式 Word（.docx，原生可编辑公式排版）。
+
+    Args:
+        filename: 输出文件名（不含路径），缺省用发明名称命名。
+    """
+    text = draft_state.full_text()
+    if len(text) < 1000:
+        return _dump({"error": "草稿内容不足（<1000字），先完成各章节再导出。"})
+    try:
+        from src.utils.word_exporter import export_disclosure_to_word
+
+        out_dir = Path(__file__).resolve().parents[1] / "output"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        title = (draft_state._load().get("title") or "").strip()
+        name = (filename.strip() or title or "交底书").replace("/", "_").replace(chr(92), "_")
+        if not name.endswith(".docx"):
+            name += ".docx"
+        saved = export_disclosure_to_word(text, str(out_dir / name), title or None)
+        size_kb = round(Path(saved).stat().st_size / 1024, 1)
+        return _dump({"saved": saved, "size_kb": size_kb,
+                      "hint": "导出成功，Word 中可继续编辑后提交。"})
+    except Exception as e:
+        return _dump({"error": f"Word 导出失败: {e}"})
+
+
 # ── 校验工具（读同一草稿状态）────────────────────────────────────
 
 
