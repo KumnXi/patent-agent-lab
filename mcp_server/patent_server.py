@@ -381,17 +381,37 @@ def verify_citations() -> str:
     eng = _engine_ready()
     if eng is None:
         return _dump(_not_ready())
-    pids = sorted(set(re.findall(r"CN\d+[A-Z]", text)))
     sections = draft_state._load().get("sections", {})
     results = []
-    for pid in pids:
+    # 公开号（CN110161386A）：查本地精库
+    for pid in sorted(set(re.findall(r"CN\d{9,}[A-Z]", text))):
         try:
             hit = eng.db_loader.get_patent_by_id(pid)
         except Exception:
             hit = None
         where = [name for name, c in sections.items() if pid in c]
-        results.append({"patent_id": pid, "in_db": bool(hit), "where": where,
+        results.append({"patent_id": pid, "kind": "公开号", "in_db": bool(hit),
+                        "where": where,
                         "status": "OK 本地库内" if hit else "WARN 不在本地库，须人工核实"})
+    # 申请号（CN201610876437.0）：查 HF 52万篇库（其来源即 CNIPA 官方记录）
+    hf_checked = False
+    if HF_DB.exists():
+        hf_checked = True
+        import sqlite3 as _sq
+        conn = _sq.connect(f"file:{HF_DB}?mode=ro", uri=True)
+        for appno in sorted(set(re.findall(r"CN\d{9,}\.\d", text))):
+            where = [name for name, c in sections.items() if appno in c]
+            n = conn.execute(
+                "SELECT COUNT(*) FROM patents WHERE app_number = ?", (appno,)
+            ).fetchone()[0]
+            results.append({"patent_id": appno, "kind": "申请号", "in_db": bool(n),
+                            "where": where,
+                            "status": "OK HF 库内" if n else "WARN 不在 HF 库，须人工核实"})
+        conn.close()
+    for appno in sorted(set(re.findall(r"CN\d{9,}\.\d", text))):
+        if not hf_checked:
+            results.append({"patent_id": appno, "kind": "申请号", "in_db": None,
+                            "status": "WARN HF 库未建，无法核验"})
     not_in = [r for r in results if not r["in_db"]]
     out = {"total_cited": len(results), "citations": results}
     out["hint"] = ("所有引用均在本地库内，可放心交付。" if not not_in else
