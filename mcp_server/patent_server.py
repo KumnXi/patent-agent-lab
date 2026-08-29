@@ -17,6 +17,7 @@
 import faulthandler
 import json
 import os
+import re
 import sys
 import threading
 import time
@@ -224,6 +225,34 @@ def read_full_draft() -> str:
     if not text.strip():
         return _dump({"error": "草稿为空，请先 start_disclosure 并保存章节。"})
     return text + "\n\n" + _dump(draft_state.stats())
+
+
+# ── 格式化工具 ───────────────────────────────────────────────────
+
+
+@app.tool()
+def apply_paragraph_numbering() -> str:
+    """给说明书五章节（技术领域/背景技术/发明内容/附图说明/具体实施方式）
+    的每个自然段加 [0001] 式段落编号，全文连续递进。交付前最后一步；
+    重复调用幂等（先清旧编号再加新编号）。"""
+    state = draft_state._load()
+    sections = state.get("sections", {})
+    spec = ["技术领域", "背景技术", "发明内容", "附图说明", "具体实施方式"]
+    counter = 0
+    pat = re.compile(r"^\[\d{4}\]\s*")
+    for name in spec:
+        if name not in sections:
+            continue
+        paras = [x.strip() for x in re.split(r"\n\s*\n", sections[name].strip()) if x.strip()]
+        out = []
+        for para in paras:
+            para = pat.sub("", para)
+            counter += 1
+            out.append(f"[{counter:04d}] {para}")
+        sections[name] = "\n\n".join(out)
+    state["sections"] = sections
+    draft_state._save(state)
+    return _dump({**draft_state.stats(), "numbered_paragraphs": counter})
 
 
 # ── 校验工具（读同一草稿状态）────────────────────────────────────
